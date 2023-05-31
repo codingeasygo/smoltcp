@@ -1325,7 +1325,7 @@ impl<'a> Socket<'a> {
         return Some(self.ack_reply(ip_repr, repr));
     }
 
-    pub(crate) fn accepts(&self, _cx: &mut Context, ip_repr: &IpRepr, repr: &TcpRepr) -> bool {
+    pub fn accepts(&self, _cx: &mut Context, ip_repr: &IpRepr, repr: &TcpRepr) -> bool {
         if self.state == State::Closed {
             return false;
         }
@@ -1353,7 +1353,7 @@ impl<'a> Socket<'a> {
         }
     }
 
-    pub(crate) fn process(
+    pub fn process(
         &mut self,
         cx: &mut Context,
         ip_repr: &IpRepr,
@@ -2007,7 +2007,7 @@ impl<'a> Socket<'a> {
         }
     }
 
-    pub(crate) fn dispatch<F, E>(&mut self, cx: &mut Context, emit: F) -> Result<(), E>
+    pub fn dispatch<F, E>(&mut self, cx: &mut Context, emit: F) -> Result<(), E>
     where
         F: FnOnce(&mut Context, (IpRepr, TcpRepr)) -> Result<(), E>,
     {
