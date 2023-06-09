@@ -115,7 +115,7 @@ impl<'a> SocketSet<'a> {
         }
     }
 
-    pub fn find_mut<T: AnySocket<'a>>(&mut self, handle: SocketHandle) -> Option<&mut T> {
+    pub fn find_mut<T: AnySocket<'a>>(&mut self, handle: &SocketHandle) -> Option<&mut T> {
         match self.sockets[handle.0].inner.as_mut() {
             Some(item) => T::downcast_mut(&mut item.socket),
             None => None,
