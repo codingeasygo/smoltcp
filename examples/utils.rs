@@ -53,7 +53,7 @@ where
                 )
             }
         })
-        .filter(None, LevelFilter::Trace)
+        .filter(None, LevelFilter::Error)
         .parse_filters(filter)
         .parse_env("RUST_LOG")
         .init();

@@ -109,13 +109,7 @@ impl InterfaceInner {
         {
             // Ignore IP packets not directed at us, or broadcast, or any of the multicast groups.
             // If AnyIP is enabled, also check if the packet is routed locally.
-            if !self.any_ip
-                || !ipv4_repr.dst_addr.is_unicast()
-                || self
-                    .routes
-                    .lookup(&IpAddress::Ipv4(ipv4_repr.dst_addr), self.now)
-                    .map_or(true, |router_addr| !self.has_ip_addr(router_addr))
-            {
+            if !self.any_ip || !ipv4_repr.dst_addr.is_unicast() {
                 return None;
             }
         }
