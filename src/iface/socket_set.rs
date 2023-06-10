@@ -115,9 +115,9 @@ impl<'a> SocketSet<'a> {
         }
     }
 
-    pub fn find_mut(&mut self, handle: &SocketHandle) -> Option<&Socket<'a>> {
+    pub fn find_mut(&mut self, handle: &SocketHandle) -> Option<&mut Socket<'a>> {
         match self.sockets[handle.0].inner.as_mut() {
-            Some(item) => Some(&item.socket),
+            Some(item) => Some(&mut item.socket),
             None => None,
         }
     }
