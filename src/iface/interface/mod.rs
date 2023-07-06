@@ -861,6 +861,35 @@ impl Interface {
         processed_any
     }
 
+    pub fn dispatch_any_udp<D>(
+        &mut self,
+        device: &mut D,
+        src_addr: SocketAddr,
+        dst_addr: SocketAddr,
+        payload: &[u8],
+    ) -> Option<usize>
+    where
+        D: Device + ?Sized,
+    {
+        let repr = UdpRepr {
+            src_port: src_addr.port(),
+            dst_port: dst_addr.port(),
+        };
+        let ip_repr = IpRepr::new(
+            src_addr.ip().into(),
+            dst_addr.ip().into(),
+            IpProtocol::Udp,
+            repr.header_len() + payload.len(),
+            64,
+        );
+        let response = IpPacket::Udp((ip_repr, repr, payload));
+        let t = device.transmit(self.inner.now)?;
+        match self.inner.dispatch_ip(t, response, &mut self.fragmenter) {
+            Ok(_) => Some(payload.len()),
+            Err(_) => None,
+        }
+    }
+
     fn socket_egress<D>(&mut self, device: &mut D, sockets: &mut SocketSet<'_>) -> bool
     where
         D: Device + ?Sized,
@@ -1372,37 +1401,10 @@ impl InterfaceInner {
         }
 
         if self.any_ip {
-            let udp_rx_buffer = udp::PacketBuffer::new(
-                vec![udp::PacketMetadata::EMPTY, udp::PacketMetadata::EMPTY],
-                vec![0; 65535],
-            );
-            let udp_tx_buffer = udp::PacketBuffer::new(
-                vec![udp::PacketMetadata::EMPTY, udp::PacketMetadata::EMPTY],
-                vec![0; 65535],
-            );
-            let mut udp_socket = udp::Socket::new(udp_rx_buffer, udp_tx_buffer);
-            let local_ep = SocketAddr::new(ip_repr.dst_addr().into(), udp_repr.dst_port);
-            let remote_ep = SocketAddr::new(ip_repr.src_addr().into(), udp_repr.src_port);
-            match udp_socket.bind(local_ep) {
-                Ok(_) => {
-                    if udp_socket.accepts(self, &ip_repr, &udp_repr) {
-                        log::info!(
-                            "accept any udp bind success on {} from {}",
-                            local_ep,
-                            remote_ep
-                        );
-                        udp_socket.process(self, &ip_repr, &udp_repr, udp_payload);
-                        sockets.add(udp_socket);
-                        return None;
-                    }
-                }
-                Err(e) => log::error!(
-                    "accept any udp bind fail {} on {} from {}",
-                    e,
-                    local_ep,
-                    remote_ep
-                ),
-            };
+            let dst_addr = SocketAddr::new(ip_repr.dst_addr().into(), udp_repr.dst_port);
+            let src_addr = SocketAddr::new(ip_repr.src_addr().into(), udp_repr.src_port);
+            sockets.add_any_udp((src_addr, dst_addr, udp_payload.to_vec()));
+            return None;
         }
 
         // The packet wasn't handled by a socket, send an ICMP port unreachable packet.

@@ -1,5 +1,6 @@
 use core::fmt;
 use managed::ManagedSlice;
+use std::net::SocketAddr;
 
 use super::socket_meta::Meta;
 use crate::socket::{AnySocket, Socket};
@@ -41,6 +42,7 @@ impl fmt::Display for SocketHandle {
 #[derive(Debug)]
 pub struct SocketSet<'a> {
     sockets: ManagedSlice<'a, SocketStorage<'a>>,
+    any_udp: Vec<(SocketAddr, SocketAddr, Vec<u8>)>,
 }
 
 impl<'a> SocketSet<'a> {
@@ -50,7 +52,8 @@ impl<'a> SocketSet<'a> {
         SocketsT: Into<ManagedSlice<'a, SocketStorage<'a>>>,
     {
         let sockets = sockets.into();
-        SocketSet { sockets }
+        let any_udp = vec![];
+        SocketSet { sockets, any_udp }
     }
 
     /// Add a socket to the set, and return its handle.
@@ -85,6 +88,18 @@ impl<'a> SocketSet<'a> {
                 let index = sockets.len() - 1;
                 put(index, &mut sockets[index], socket)
             }
+        }
+    }
+
+    pub fn add_any_udp(&mut self, value: (SocketAddr, SocketAddr, Vec<u8>)) {
+        self.any_udp.push(value);
+    }
+
+    pub fn take_any_udp(&mut self) -> Option<(SocketAddr, SocketAddr, Vec<u8>)> {
+        if self.any_udp.is_empty() {
+            None
+        } else {
+            Some(self.any_udp.remove(0))
         }
     }
 

@@ -1,10 +1,12 @@
 mod utils;
 
 use smoltcp::iface::{Config, Interface, SocketSet};
-use smoltcp::phy::{wait as phy_wait, Medium};
+use smoltcp::phy::{wait as phy_wait, Device, Medium};
+use smoltcp::socket::tcp::State;
 use smoltcp::socket::Socket;
 use smoltcp::time::Instant;
-use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address, Ipv6Address};
+use smoltcp::wire::{EthernetAddress, IpAddress, IpCidr, Ipv4Address};
+use std::os::unix::io::AsRawFd;
 
 fn main() {
     utils::setup_logging("");
@@ -35,21 +37,12 @@ fn main() {
         ip_addrs
             .push(IpCidr::new(IpAddress::v4(192, 168, 69, 1), 24))
             .unwrap();
-        ip_addrs
-            .push(IpCidr::new(IpAddress::v6(0xfdaa, 0, 0, 0, 0, 0, 0, 1), 64))
-            .unwrap();
-        ip_addrs
-            .push(IpCidr::new(IpAddress::v6(0xfe80, 0, 0, 0, 0, 0, 0, 1), 64))
-            .unwrap();
     });
     iface
         .routes_mut()
         .add_default_ipv4_route(Ipv4Address::new(192, 168, 69, 100))
         .unwrap();
-    iface
-        .routes_mut()
-        .add_default_ipv6_route(Ipv6Address::new(0xfe80, 0, 0, 0, 0, 0, 0, 0x100))
-        .unwrap();
+    iface.set_any_ip(true);
 
     // Create sockets
     let mut sockets = SocketSet::new(vec![]);
@@ -57,17 +50,9 @@ fn main() {
     loop {
         let timestamp = Instant::now();
         iface.poll(timestamp, &mut device, &mut sockets);
+        let mut closed = vec![];
         for (h, v) in sockets.iter_mut() {
             match v {
-                Socket::Udp(v) => {
-                    if v.can_recv() {
-                        let (data, ep) = v.recv().unwrap();
-                        let data = data.to_owned();
-                        if v.can_send() && !data.is_empty() {
-                            v.send_slice(&data[..], ep).unwrap();
-                        }
-                    }
-                }
                 Socket::Tcp(v) => {
                     if v.may_recv() {
                         let data = v
@@ -81,8 +66,34 @@ fn main() {
                             v.send_slice(&data[..]).unwrap();
                         }
                     }
+                    if !v.may_recv() {
+                        let state = v.state();
+                        if state == State::CloseWait {
+                            v.close();
+                        }
+                        if state == State::Closed {
+                            closed.push(h);
+                        }
+                    }
+                    // println!("may_send ==> {}", v.may_send());
+                    // println!("may_recv ==> {}", v.may_recv());
+                    // println!("state ==> {}", v.state());
+                    // println!("is_open ==> {}", v.is_open());
+                    // println!("is_active ==> {}", v.is_active());
+                    // println!("is_listening ==> {}", v.is_listening());
                 }
                 _ => (),
+            }
+        }
+        for h in closed {
+            sockets.remove(h);
+        }
+        loop {
+            match sockets.take_any_udp() {
+                Some(packet) => {
+                    iface.dispatch_any_udp(&mut device, packet.1, packet.0, &packet.2);
+                }
+                None => break,
             }
         }
         phy_wait(fd, iface.poll_delay(timestamp, &sockets)).expect("wait error");
